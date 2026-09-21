@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  role_name: hashicorp_vault_configuration
+  namespace: infrastructure
+  author: infrastructure
+  description: Configure Vault LDAP authentication, KV v2 mounts, policies, and AD group mappings.
+  license: MIT
+  min_ansible_version: "2.13"
+  platforms:
+    - name: EL
+      versions:
+        - "7"
+        - "8"
+        - "9"
+dependencies: []

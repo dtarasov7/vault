@@ -23,6 +23,17 @@
         not vault_seal_status.json.initialized | bool or
         vault_seal_status.json.sealed | bool
 
+    - name: verify.yml - Check Prometheus metrics endpoint
+      ansible.builtin.uri:
+        url: "{{ vault_url }}/v1/sys/metrics?format=prometheus"
+        method: GET
+        status_code: 200
+        return_content: true
+      register: vault_prometheus_metrics
+      failed_when:
+        - "'vault_core_unsealed' not in vault_prometheus_metrics.content"
+        - "'vault_runtime_' not in vault_prometheus_metrics.content"
+
     - name: verify.yml - Read protected initialization material
       ansible.builtin.slurp:
         src: "{{ vault_init_file }}"

@@ -24,6 +24,9 @@ verify its backup, and remove the working copy.
   `hashicorp_vault_api_port`, `hashicorp_vault_cluster_port`,
   `hashicorp_vault_bind_address`, `hashicorp_vault_api_address`,
   `hashicorp_vault_disable_mlock`, `hashicorp_vault_ui`, and `hashicorp_vault_log_level`.
+- Telemetry: `hashicorp_vault_telemetry_enabled`,
+  `hashicorp_vault_prometheus_retention_time`, `hashicorp_vault_telemetry_disable_hostname`,
+  and `hashicorp_vault_unauthenticated_metrics_access`.
 - Initialization: `hashicorp_vault_initialize`, `hashicorp_vault_key_shares` (must be 5),
   `hashicorp_vault_key_threshold` (must be 2), `hashicorp_vault_auto_unseal_after_init`,
   `hashicorp_vault_init_output_path`, `hashicorp_vault_init_output_owner`,
@@ -60,9 +63,17 @@ vault3 ansible_host=10.10.10.13
 
 ## Tags and tests
 
+When telemetry is enabled, Prometheus metrics are exposed at
+`/v1/sys/metrics?format=prometheus`. Anonymous scrape access is enabled by default; set
+`hashicorp_vault_unauthenticated_metrics_access: false` and configure a token with read
+access to `sys/metrics` when the endpoint must be protected.
+The Grafana 12 dashboard is provided at `dashboards/vault.json` and uses Prometheus
+datasource, `job`, `env`, `group`, and `instance` variables. Set the `env` and `group`
+labels in the Prometheus scrape configuration.
+
 Tags are `pre-req`, `user`, `install`, `ssl`, `config`, `init`, `clean`, and `never`.
 The default Molecule scenario uses `molecule_local/redos:7.3.6` and tests a three-node
-cluster, KV I/O, and operation after one follower is stopped. The `single` scenario tests
+cluster, Prometheus metrics, KV I/O, and operation after one follower is stopped. The `single` scenario tests
 one-node deployment with the same RedOS image and Vault 2.0.1 package.
 
 ```bash

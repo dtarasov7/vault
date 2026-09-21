@@ -1,0 +1,79 @@
+---
+- name: clean.yml - Require explicit cleanup confirmation
+  ansible.builtin.assert:
+    that:
+      - hashicorp_vault_configuration_clean_confirm | bool
+    fail_msg: Set hashicorp_vault_configuration_clean_confirm=true to run cleanup.
+    quiet: true
+  run_once: true
+
+- name: clean.yml - Initialize managed ACL policy name list
+  ansible.builtin.set_fact:
+    hashicorp_vault_configuration_cleanup_policies: []
+  changed_when: false
+  run_once: true
+
+- name: clean.yml - Build managed ACL policy name list
+  ansible.builtin.set_fact:
+    hashicorp_vault_configuration_cleanup_policies: >-
+      {{ (hashicorp_vault_configuration_cleanup_policies | default([]))
+         + [item.rw_policy | default(hashicorp_vault_configuration_policy_prefix + '-' + item.mount + '-rw')]
+         + [item.ro_policy | default(hashicorp_vault_configuration_policy_prefix + '-' + item.mount + '-ro')] }}
+  loop: "{{ hashicorp_vault_configuration_kv_v2 }}"
+  loop_control:
+    label: "{{ item.mount }}"
+  changed_when: false
+  run_once: true
+
+- name: clean.yml - Delete managed ACL policies
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/sys/policies/acl/{{ item }}"
+    method: DELETE
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code: 204
+  loop: "{{ hashicorp_vault_configuration_cleanup_policies | default([]) | unique | list }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: true
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"
+
+- name: clean.yml - Disable managed KV mounts when requested
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/sys/mounts/{{ item.mount }}"
+    method: DELETE
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code: 204
+  loop: "{{ hashicorp_vault_configuration_kv_v2 }}"
+  loop_control:
+    label: "{{ item.mount }}"
+  when: hashicorp_vault_configuration_clean_remove_mounts | bool
+  changed_when: true
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"
+
+- name: clean.yml - Disable LDAP authentication when requested
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/sys/auth/{{ hashicorp_vault_configuration_ldap_path }}"
+    method: DELETE
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code: 204
+  when: hashicorp_vault_configuration_clean_disable_ldap | bool
+  changed_when: true
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"
+
+- name: clean.yml - End play after cleanup
+  ansible.builtin.meta: end_play

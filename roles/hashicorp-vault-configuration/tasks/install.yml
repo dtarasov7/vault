@@ -1,0 +1,6 @@
+---
+- name: install.yml - Keep Vault installation outside this configuration role
+  ansible.builtin.assert:
+    that: true
+    quiet: true
+  changed_when: false

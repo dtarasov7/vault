@@ -1,0 +1,16 @@
+---
+hashicorp_vault_configuration_headers: >-
+  {{
+    {'X-Vault-Token': hashicorp_vault_configuration_token}
+    | combine(
+        (hashicorp_vault_configuration_namespace | length > 0)
+        | ternary({'X-Vault-Namespace': hashicorp_vault_configuration_namespace}, {})
+      )
+  }}
+
+hashicorp_vault_configuration_ldap_public: >-
+  {{ hashicorp_vault_configuration_ldap | dict2items
+     | rejectattr('key', 'in', ['bindpass', 'userfilter', 'groupfilter', 'certificate'])
+     | items2dict }}
+
+hashicorp_vault_configuration_policy_newline: "\n"

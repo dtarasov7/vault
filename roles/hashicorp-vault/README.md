@@ -52,6 +52,10 @@ integrated storage (Raft) для одного либо трёх узлов. По
 | `hashicorp_vault_disable_mlock` | `true` | Отключить `mlock`; для production рекомендуется настроить capability и `false`. |
 | `hashicorp_vault_ui` | `true` | Включить web UI. |
 | `hashicorp_vault_log_level` | `info` | Уровень логирования Vault. |
+| `hashicorp_vault_telemetry_enabled` | `true` | Включить telemetry-блок Vault для Prometheus. |
+| `hashicorp_vault_prometheus_retention_time` | `30s` | Время хранения метрик в памяти для Prometheus endpoint. |
+| `hashicorp_vault_telemetry_disable_hostname` | `true` | Не добавлять hostname Vault в имена метрик. |
+| `hashicorp_vault_unauthenticated_metrics_access` | `true` | Разрешить Prometheus читать endpoint без Vault token. |
 | `hashicorp_vault_required_packages` | `[ca-certificates]` | Системные зависимости. |
 | `hashicorp_vault_minimum_os_major_version` | `7` | Минимальная основная версия ОС. |
 
@@ -148,11 +152,37 @@ vault3 ansible_host=10.10.10.13
 - `clean` — полное удаление, используется вместе с `hashicorp_vault_clean_confirm=true`;
 - `never` — блокирует случайный запуск очистки.
 
+## Метрики Prometheus
+
+При `hashicorp_vault_telemetry_enabled: true` метрики доступны по адресу
+`/v1/sys/metrics?format=prometheus` на API-порту Vault. По умолчанию endpoint доступен
+без Vault token, чтобы Prometheus мог опрашивать его напрямую. Для защищённого endpoint
+задайте `hashicorp_vault_unauthenticated_metrics_access: false` и настройте передачу
+токена с правом `read` на `sys/metrics` в Prometheus.
+
+```yaml
+scrape_configs:
+  - job_name: vault
+    metrics_path: /v1/sys/metrics
+    params:
+      format: [prometheus]
+    static_configs:
+      - labels:
+          env: production
+          group: vault
+        targets:
+          - vault1.example.org:8200
+```
+
+Готовый дашборд Grafana 12 находится в `dashboards/vault.json`. Он использует
+Prometheus datasource variable и фильтры `job`, `env`, `group`, `instance`. Метки
+`env` и `group` должны быть заданы в `scrape_config`, как в примере выше.
+
 ## Molecule
 
 Сценарий `default` поднимает три systemd-контейнера RedOS 7.3.6, устанавливает
 `vault-2.0.1-1.el7` из репозитория `updates`, разворачивает Raft,
-проверяет сервис, API, запись и чтение KV, останавливает один follower и повторяет
+проверяет сервис, API, Prometheus metrics endpoint, запись и чтение KV, останавливает один follower и повторяет
 запись/чтение при отказе узла. Сценарий `single` проверяет одноузловой вариант.
 
 ```bash

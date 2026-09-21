@@ -1,0 +1,65 @@
+---
+- name: pre-req.yml - Validate required role variables
+  ansible.builtin.assert:
+    that:
+      - hashicorp_vault_configuration_address | length > 0
+      - hashicorp_vault_configuration_token | length > 0
+      - hashicorp_vault_configuration_ldap_path is match('^[A-Za-z0-9_-]+$')
+      - hashicorp_vault_configuration_ldap.url | default('') | length > 0
+      - hashicorp_vault_configuration_ldap.binddn | default('') | length > 0
+      - hashicorp_vault_configuration_ldap.bindpass | default('') | length > 0
+      - hashicorp_vault_configuration_ldap.userdn | default('') | length > 0
+      - hashicorp_vault_configuration_ldap.groupdn | default('') | length > 0
+    fail_msg: Required Vault API or LDAP configuration variables are missing or invalid.
+    quiet: true
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"
+
+- name: pre-req.yml - Validate KV v2 definitions
+  ansible.builtin.assert:
+    that:
+      - item.mount is defined
+      - item.mount is match('^[A-Za-z0-9_-]+$')
+      - item.rw_group | default('') | length > 0
+      - item.ro_group | default('') | length > 0
+      - item.rw_group != item.ro_group
+    fail_msg: "Invalid KV v2 definition: {{ item | to_json }}"
+    quiet: true
+  loop: "{{ hashicorp_vault_configuration_kv_v2 }}"
+  loop_control:
+    label: "{{ item.mount | default('undefined') }}"
+  run_once: true
+
+- name: pre-req.yml - Validate unique KV v2 mount names
+  ansible.builtin.assert:
+    that:
+      - >-
+        (hashicorp_vault_configuration_kv_v2 | map(attribute='mount') | list | unique | length)
+        == (hashicorp_vault_configuration_kv_v2 | length)
+    fail_msg: hashicorp_vault_configuration_kv_v2 contains duplicate mount names.
+    quiet: true
+  run_once: true
+
+- name: pre-req.yml - Check Vault API readiness
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/sys/health"
+    method: GET
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code:
+      - 200
+      - 429
+      - 472
+      - 473
+    return_content: true
+  register: hashicorp_vault_configuration_health
+  failed_when: >-
+    hashicorp_vault_configuration_health.status != 200 or
+    not (hashicorp_vault_configuration_health.json.initialized | default(false) | bool) or
+    (hashicorp_vault_configuration_health.json.sealed | default(true) | bool)
+  changed_when: false
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"

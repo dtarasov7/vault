@@ -1,0 +1,6 @@
+---
+- name: user.yml - Keep service account management outside this API-only role
+  ansible.builtin.assert:
+    that: true
+    quiet: true
+  changed_when: false

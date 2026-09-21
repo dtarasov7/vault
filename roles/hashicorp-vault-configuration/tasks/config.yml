@@ -1,0 +1,12 @@
+---
+- name: config.yml - Configure LDAP authentication
+  ansible.builtin.import_tasks: ldap.yml
+
+- name: config.yml - Configure KV v2 mounts
+  ansible.builtin.import_tasks: kv.yml
+
+- name: config.yml - Configure KV policies
+  ansible.builtin.import_tasks: policies.yml
+
+- name: config.yml - Configure AD group mappings
+  ansible.builtin.import_tasks: groups.yml

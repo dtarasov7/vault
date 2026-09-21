@@ -1,0 +1,93 @@
+---
+- name: policies.yml - Initialize generated KV policy records
+  ansible.builtin.set_fact:
+    hashicorp_vault_configuration_policy_records: []
+  changed_when: false
+  run_once: true
+
+- name: policies.yml - Define generated KV policy records
+  ansible.builtin.set_fact:
+    hashicorp_vault_configuration_policy_records: >-
+      {{ hashicorp_vault_configuration_policy_records + [
+          {
+            'name': item.rw_policy | default(hashicorp_vault_configuration_policy_prefix + '-' + item.mount + '-rw'),
+            'rules': [
+              'path "' + item.mount + '/data/*" {',
+              '  capabilities = ["create", "read", "update", "delete", "patch", "list"]',
+              '}', '',
+              'path "' + item.mount + '/metadata/*" {',
+              '  capabilities = ["read", "update", "delete", "list"]',
+              '}', '',
+              'path "' + item.mount + '/delete/*" {',
+              '  capabilities = ["update"]',
+              '}', '',
+              'path "' + item.mount + '/undelete/*" {',
+              '  capabilities = ["update"]',
+              '}', '',
+              'path "' + item.mount + '/destroy/*" {',
+              '  capabilities = ["update"]',
+              '}'
+            ] | join(hashicorp_vault_configuration_policy_newline)
+          },
+          {
+            'name': item.ro_policy | default(hashicorp_vault_configuration_policy_prefix + '-' + item.mount + '-ro'),
+            'rules': [
+              'path "' + item.mount + '/data/*" {',
+              '  capabilities = ["read", "list"]',
+              '}', '',
+              'path "' + item.mount + '/metadata/*" {',
+              '  capabilities = ["read", "list"]',
+              '}'
+            ] | join(hashicorp_vault_configuration_policy_newline)
+          }
+        ] }}
+  loop: "{{ hashicorp_vault_configuration_kv_v2 }}"
+  loop_control:
+    label: "{{ item.mount }}"
+  changed_when: false
+  run_once: true
+
+- name: policies.yml - Read managed policies
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/sys/policies/acl/{{ item.name }}"
+    method: GET
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code:
+      - 200
+      - 404
+    return_content: true
+  loop: "{{ hashicorp_vault_configuration_policy_records | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: hashicorp_vault_configuration_policy_reads
+  changed_when: false
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"
+
+- name: policies.yml - Create or update managed policies
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/sys/policies/acl/{{ item.item.name }}"
+    method: PUT
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    body_format: json
+    body:
+      policy: "{{ item.item.rules }}"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code: 204
+  when: >-
+    item.status == 404 or
+    (item.json.data.policy | default(item.json.data.rules | default('')) | trim)
+    != (item.item.rules | trim)
+  changed_when: true
+  loop: "{{ hashicorp_vault_configuration_policy_reads.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"

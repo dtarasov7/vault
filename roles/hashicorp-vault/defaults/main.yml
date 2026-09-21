@@ -28,6 +28,11 @@ hashicorp_vault_disable_mlock: true
 hashicorp_vault_ui: true
 hashicorp_vault_log_level: info
 
+hashicorp_vault_telemetry_enabled: true
+hashicorp_vault_prometheus_retention_time: 30s
+hashicorp_vault_telemetry_disable_hostname: true
+hashicorp_vault_unauthenticated_metrics_access: true
+
 hashicorp_vault_tls_enabled: false
 hashicorp_vault_api_validate_certs: true
 hashicorp_vault_hashi_vault_path: ""

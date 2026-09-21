@@ -1,0 +1,94 @@
+---
+- name: groups.yml - Initialize AD group policy map
+  ansible.builtin.set_fact:
+    hashicorp_vault_configuration_group_policy_map: {}
+  changed_when: false
+  run_once: true
+
+- name: groups.yml - Add RW policies to AD group map
+  ansible.builtin.set_fact:
+    hashicorp_vault_configuration_group_policy_map: >-
+      {{ hashicorp_vault_configuration_group_policy_map | combine({
+          item.rw_group: (
+            hashicorp_vault_configuration_group_policy_map[item.rw_group] | default([])
+            + [item.rw_policy | default(hashicorp_vault_configuration_policy_prefix + '-' + item.mount + '-rw')]
+          ) | unique | list
+        }) }}
+  loop: "{{ hashicorp_vault_configuration_kv_v2 }}"
+  loop_control:
+    label: "{{ item.rw_group }}"
+  changed_when: false
+  run_once: true
+
+- name: groups.yml - Add RO policies to AD group map
+  ansible.builtin.set_fact:
+    hashicorp_vault_configuration_group_policy_map: >-
+      {{ hashicorp_vault_configuration_group_policy_map | combine({
+          item.ro_group: (
+            hashicorp_vault_configuration_group_policy_map[item.ro_group] | default([])
+            + [item.ro_policy | default(hashicorp_vault_configuration_policy_prefix + '-' + item.mount + '-ro')]
+          ) | unique | list
+        }) }}
+  loop: "{{ hashicorp_vault_configuration_kv_v2 }}"
+  loop_control:
+    label: "{{ item.ro_group }}"
+  changed_when: false
+  run_once: true
+
+- name: groups.yml - Read LDAP AD group mappings
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/auth/{{ hashicorp_vault_configuration_ldap_path }}/groups/{{ item.key | urlencode }}"
+    method: GET
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code:
+      - 200
+      - 404
+    return_content: true
+  loop: "{{ hashicorp_vault_configuration_group_policy_map | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: hashicorp_vault_configuration_group_reads
+  changed_when: false
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"
+
+- name: groups.yml - Create or update LDAP AD group mappings
+  vars:
+    hashicorp_vault_configuration_existing_group_policies: >-
+      {{ item.json.data.policies | default([]) if item.status == 200 else [] }}
+    hashicorp_vault_configuration_desired_group_policies: >-
+      {{
+        ((
+          hashicorp_vault_configuration_existing_group_policies
+          if hashicorp_vault_configuration_preserve_group_policies | bool
+          else []
+        )
+        + item.item.value)
+        | unique | sort | list
+      }}
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/auth/{{ hashicorp_vault_configuration_ldap_path }}/groups/{{ item.item.key | urlencode }}"
+    method: POST
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    body_format: json
+    body:
+      policies: "{{ hashicorp_vault_configuration_desired_group_policies }}"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code: 204
+  when: >-
+    item.status == 404 or
+    (hashicorp_vault_configuration_existing_group_policies | sort | list)
+    != (hashicorp_vault_configuration_desired_group_policies | sort | list)
+  changed_when: true
+  loop: "{{ hashicorp_vault_configuration_group_reads.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"

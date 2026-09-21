@@ -1,0 +1,56 @@
+---
+- name: kv.yml - Read enabled secrets engines
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/sys/mounts"
+    method: GET
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code: 200
+    return_content: true
+  register: hashicorp_vault_configuration_mounts
+  changed_when: false
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"
+
+- name: kv.yml - Reject incompatible existing secrets engines
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.mount + '/' not in hashicorp_vault_configuration_mounts.json.data or
+        (
+          hashicorp_vault_configuration_mounts.json.data[item.mount + '/'].type == 'kv' and
+          hashicorp_vault_configuration_mounts.json.data[item.mount + '/'].options.version | default('1') | string == '2'
+        )
+    fail_msg: "Mount {{ item.mount }} exists but is not KV v2."
+    quiet: true
+  loop: "{{ hashicorp_vault_configuration_kv_v2 }}"
+  loop_control:
+    label: "{{ item.mount }}"
+  run_once: true
+
+- name: kv.yml - Enable missing KV v2 secrets engines
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/sys/mounts/{{ item.mount }}"
+    method: POST
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    body_format: json
+    body:
+      type: kv
+      description: "{{ item.description | default('Managed KV v2 mount ' + item.mount) }}"
+      options:
+        version: "2"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code: 204
+  when: item.mount + '/' not in hashicorp_vault_configuration_mounts.json.data
+  changed_when: true
+  loop: "{{ hashicorp_vault_configuration_kv_v2 }}"
+  loop_control:
+    label: "{{ item.mount }}"
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"

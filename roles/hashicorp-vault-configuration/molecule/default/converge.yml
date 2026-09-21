@@ -1,0 +1,60 @@
+---
+- name: Converge Vault configuration
+  hosts: vault
+  gather_facts: true
+  vars:
+    hashicorp_vault_api_address: "{{ ansible_facts.default_ipv4.address }}"
+    hashicorp_vault_api_validate_certs: false
+    hashicorp_vault_init_output_path: /tmp/molecule-vault-configuration-init.json
+    hashicorp_vault_init_output_owner: "{{ lookup('env', 'USER') }}"
+  tasks:
+    - name: converge.yml - Install and initialize Vault
+      ansible.builtin.include_role:
+        name: hashicorp-vault
+
+    - name: converge.yml - Read protected initialization material
+      ansible.builtin.slurp:
+        src: "{{ hashicorp_vault_init_output_path }}"
+      delegate_to: localhost
+      register: hashicorp_vault_configuration_init_raw
+      no_log: true
+
+    - name: converge.yml - Decode root token
+      ansible.builtin.set_fact:
+        hashicorp_vault_configuration_test_token: >-
+          {{ (hashicorp_vault_configuration_init_raw.content | b64decode | from_json).root_token }}
+      no_log: true
+
+    - name: converge.yml - Apply Vault LDAP and KV configuration
+      ansible.builtin.include_role:
+        name: hashicorp-vault-configuration
+      vars:
+        hashicorp_vault_configuration_address: "http://{{ ansible_facts.default_ipv4.address }}:8200"
+        hashicorp_vault_configuration_validate_certs: false
+        hashicorp_vault_configuration_token: "{{ hashicorp_vault_configuration_test_token }}"
+        hashicorp_vault_configuration_ldap:
+          url: ldaps://ad.example.org:636
+          binddn: CN=vault-bind,OU=Service Accounts,DC=example,DC=org
+          bindpass: molecule-bind-password
+          userdn: OU=Users,DC=example,DC=org
+          userattr: sAMAccountName
+          userfilter: "({{ '{{.UserAttr}}' }}={{ '{{.Username}}' }})"
+          groupdn: OU=Groups,DC=example,DC=org
+          groupattr: cn
+          groupfilter: "(&(objectClass=group)(member={{ '{{.UserDN}}' }}))"
+          discoverdn: false
+          deny_null_bind: true
+          case_sensitive_names: false
+          use_token_groups: false
+          starttls: false
+          insecure_tls: false
+          tls_min_version: tls12
+          tls_max_version: tls13
+          certificate: ""
+          connection_timeout: 30
+          request_timeout: 90
+        hashicorp_vault_configuration_kv_v2:
+          - mount: molecule-apps
+            description: Molecule application secrets
+            rw_group: AD-Molecule-RW
+            ro_group: AD-Molecule-RO

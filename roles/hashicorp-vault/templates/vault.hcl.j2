@@ -3,6 +3,13 @@ disable_mlock = {{ hashicorp_vault_disable_mlock | bool | lower }}
 cluster_name = "{{ hashicorp_vault_cluster_name }}"
 log_level = "{{ hashicorp_vault_log_level }}"
 
+{% if hashicorp_vault_telemetry_enabled | bool %}
+telemetry {
+  prometheus_retention_time = "{{ hashicorp_vault_prometheus_retention_time }}"
+  disable_hostname = {{ hashicorp_vault_telemetry_disable_hostname | bool | lower }}
+}
+{% endif %}
+
 api_addr = "{{ 'https' if hashicorp_vault_tls_enabled | bool else 'http' }}://{{ hashicorp_vault_api_address }}:{{ hashicorp_vault_api_port }}"
 cluster_addr = "{{ 'https' if hashicorp_vault_tls_enabled | bool else 'http' }}://{{ hashicorp_vault_api_address }}:{{ hashicorp_vault_cluster_port }}"
 
@@ -16,6 +23,11 @@ listener "tcp" {
   tls_client_ca_file = "{{ hashicorp_vault_tls_dir }}/{{ hashicorp_vault_cacertfile | basename }}"
 {% else %}
   tls_disable = true
+{% endif %}
+{% if hashicorp_vault_telemetry_enabled | bool %}
+  telemetry {
+    unauthenticated_metrics_access = {{ hashicorp_vault_unauthenticated_metrics_access | bool | lower }}
+  }
 {% endif %}
 }
 

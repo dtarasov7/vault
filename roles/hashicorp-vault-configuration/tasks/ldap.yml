@@ -1,0 +1,109 @@
+---
+- name: ldap.yml - Read enabled authentication methods
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/sys/auth"
+    method: GET
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code: 200
+    return_content: true
+  register: hashicorp_vault_configuration_auth_methods
+  changed_when: false
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"
+
+- name: ldap.yml - Reject a non-LDAP method at the requested path
+  ansible.builtin.assert:
+    that:
+      - >-
+        hashicorp_vault_configuration_ldap_path + '/' not in hashicorp_vault_configuration_auth_methods.json.data or
+        hashicorp_vault_configuration_auth_methods.json.data[hashicorp_vault_configuration_ldap_path + '/'].type == 'ldap'
+    fail_msg: "Auth path {{ hashicorp_vault_configuration_ldap_path }} is already used by another auth type."
+    quiet: true
+  run_once: true
+
+- name: ldap.yml - Enable LDAP authentication method
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/sys/auth/{{ hashicorp_vault_configuration_ldap_path }}"
+    method: POST
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    body_format: json
+    body:
+      type: ldap
+      description: "{{ hashicorp_vault_configuration_ldap_description }}"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code: 204
+  when: hashicorp_vault_configuration_ldap_path + '/' not in hashicorp_vault_configuration_auth_methods.json.data
+  changed_when: true
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"
+
+- name: ldap.yml - Read current LDAP configuration
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/auth/{{ hashicorp_vault_configuration_ldap_path }}/config"
+    method: GET
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code:
+      - 200
+      - 404
+    return_content: true
+  register: hashicorp_vault_configuration_ldap_current
+  changed_when: false
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"
+
+- name: ldap.yml - Initialize LDAP drift state
+  ansible.builtin.set_fact:
+    hashicorp_vault_configuration_ldap_drift: "{{ hashicorp_vault_configuration_ldap_current.status == 404 }}"
+  changed_when: false
+  run_once: true
+
+- name: ldap.yml - Detect LDAP configuration drift
+  ansible.builtin.set_fact:
+    hashicorp_vault_configuration_ldap_drift: true
+  when: >-
+    (
+      item.key in ['userattr', 'groupattr'] and
+      ((hashicorp_vault_configuration_ldap_current.json.data | default({}))[item.key] | default('') | lower)
+      != (item.value | lower)
+    ) or
+    (
+      item.key not in ['userattr', 'groupattr'] and
+      ((hashicorp_vault_configuration_ldap_current.json.data | default({}))[item.key] | default(none) | string)
+      != (item.value | string)
+    )
+  loop: "{{ hashicorp_vault_configuration_ldap_public | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  changed_when: false
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"
+
+- name: ldap.yml - Apply LDAP configuration
+  ansible.builtin.uri:
+    url: "{{ hashicorp_vault_configuration_address }}/v1/auth/{{ hashicorp_vault_configuration_ldap_path }}/config"
+    method: POST
+    headers: "{{ hashicorp_vault_configuration_headers }}"
+    body_format: json
+    body: "{{ hashicorp_vault_configuration_ldap }}"
+    validate_certs: "{{ hashicorp_vault_configuration_validate_certs }}"
+    ca_path: "{{ hashicorp_vault_configuration_ca_path if hashicorp_vault_configuration_ca_path | length > 0 else omit }}"
+    timeout: "{{ hashicorp_vault_configuration_api_timeout }}"
+    status_code: 204
+  register: hashicorp_vault_configuration_ldap_apply
+  changed_when: >-
+    hashicorp_vault_configuration_ldap_drift | bool or
+    hashicorp_vault_configuration_ldap_force_bindpass_update | bool
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+  no_log: "{{ hashicorp_vault_configuration_no_log }}"

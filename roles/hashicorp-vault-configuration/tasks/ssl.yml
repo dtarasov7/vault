@@ -1,0 +1,18 @@
+---
+- name: ssl.yml - Use the configured CA path for Vault API validation
+  ansible.builtin.stat:
+    path: "{{ hashicorp_vault_configuration_ca_path }}"
+  register: hashicorp_vault_configuration_ca
+  when: hashicorp_vault_configuration_ca_path | length > 0
+  delegate_to: "{{ hashicorp_vault_configuration_delegate_to }}"
+  run_once: true
+
+- name: ssl.yml - Validate the configured CA path
+  ansible.builtin.assert:
+    that:
+      - hashicorp_vault_configuration_ca.stat.exists
+      - hashicorp_vault_configuration_ca.stat.isreg
+    fail_msg: "Vault API CA file not found: {{ hashicorp_vault_configuration_ca_path }}"
+    quiet: true
+  when: hashicorp_vault_configuration_ca_path | length > 0
+  run_once: true

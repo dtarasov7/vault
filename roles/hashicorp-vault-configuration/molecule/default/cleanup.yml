@@ -1,0 +1,9 @@
+---
+- name: Cleanup local Molecule artifacts
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: cleanup.yml - Remove protected initialization test file
+      ansible.builtin.file:
+        path: /tmp/molecule-vault-configuration-init.json
+        state: absent

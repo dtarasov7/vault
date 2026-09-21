@@ -1,0 +1,91 @@
+---
+- name: Verify Vault configuration
+  hosts: vault
+  gather_facts: true
+  vars:
+    hashicorp_vault_configuration_test_url: "http://{{ ansible_facts.default_ipv4.address }}:8200"
+    hashicorp_vault_configuration_init_file: /tmp/molecule-vault-configuration-init.json
+  tasks:
+    - name: verify.yml - Read protected initialization material
+      ansible.builtin.slurp:
+        src: "{{ hashicorp_vault_configuration_init_file }}"
+      delegate_to: localhost
+      register: hashicorp_vault_configuration_verify_init_raw
+      no_log: true
+
+    - name: verify.yml - Decode root token
+      ansible.builtin.set_fact:
+        hashicorp_vault_configuration_verify_token: >-
+          {{ (hashicorp_vault_configuration_verify_init_raw.content | b64decode | from_json).root_token }}
+      no_log: true
+
+    - name: verify.yml - Read enabled auth methods and mounts
+      ansible.builtin.uri:
+        url: "{{ hashicorp_vault_configuration_test_url }}/v1/{{ item }}"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ hashicorp_vault_configuration_verify_token }}"
+        status_code: 200
+        return_content: true
+      loop:
+        - sys/auth
+        - sys/mounts
+      register: hashicorp_vault_configuration_verify_system
+      no_log: true
+
+    - name: verify.yml - Check LDAP auth and KV v2 mount
+      ansible.builtin.assert:
+        that:
+          - "'ldap/' in hashicorp_vault_configuration_verify_system.results[0].json.data"
+          - hashicorp_vault_configuration_verify_system.results[0].json.data['ldap/'].type == 'ldap'
+          - "'molecule-apps/' in hashicorp_vault_configuration_verify_system.results[1].json.data"
+          - hashicorp_vault_configuration_verify_system.results[1].json.data['molecule-apps/'].options.version == '2'
+        quiet: true
+
+    - name: verify.yml - Read policies and group mappings
+      ansible.builtin.uri:
+        url: "{{ hashicorp_vault_configuration_test_url }}/v1/{{ item }}"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ hashicorp_vault_configuration_verify_token }}"
+        status_code: 200
+        return_content: true
+      loop:
+        - sys/policies/acl/ad-kv-molecule-apps-rw
+        - sys/policies/acl/ad-kv-molecule-apps-ro
+        - auth/ldap/groups/AD-Molecule-RW
+        - auth/ldap/groups/AD-Molecule-RO
+      register: hashicorp_vault_configuration_verify_access
+      no_log: true
+
+    - name: verify.yml - Check AD group policy mappings
+      ansible.builtin.assert:
+        that:
+          - "'ad-kv-molecule-apps-rw' in hashicorp_vault_configuration_verify_access.results[2].json.data.policies"
+          - "'ad-kv-molecule-apps-ro' in hashicorp_vault_configuration_verify_access.results[3].json.data.policies"
+        quiet: true
+
+    - name: verify.yml - Write test secret
+      ansible.builtin.uri:
+        url: "{{ hashicorp_vault_configuration_test_url }}/v1/molecule-apps/data/health"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ hashicorp_vault_configuration_verify_token }}"
+        body_format: json
+        body:
+          data:
+            value: molecule
+        status_code: 200
+      no_log: true
+
+    - name: verify.yml - Read test secret
+      ansible.builtin.uri:
+        url: "{{ hashicorp_vault_configuration_test_url }}/v1/molecule-apps/data/health"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ hashicorp_vault_configuration_verify_token }}"
+        status_code: 200
+        return_content: true
+      register: hashicorp_vault_configuration_verify_secret
+      failed_when: hashicorp_vault_configuration_verify_secret.json.data.data.value != 'molecule'
+      no_log: true

@@ -1,0 +1,59 @@
+---
+hashicorp_vault_configuration_address: "http://127.0.0.1:8200"
+hashicorp_vault_configuration_validate_certs: true
+hashicorp_vault_configuration_ca_path: ""
+hashicorp_vault_configuration_namespace: ""
+hashicorp_vault_configuration_api_timeout: 30
+hashicorp_vault_configuration_delegate_to: "{{ inventory_hostname }}"
+hashicorp_vault_configuration_no_log: true
+
+# Store the administrative token in Ansible Vault/inventory:
+hashicorp_vault_configuration_token: ""
+# Or replace the preceding value with a HashiCorp Vault lookup, for example:
+# hashicorp_vault_configuration_hashi_vault_path_token: "secret=bootstrap/data/vault:token"
+# hashicorp_vault_configuration_token: "{{ lookup('community.hashi_vault.hashi_vault', hashicorp_vault_configuration_hashi_vault_path_token) }}"
+hashicorp_vault_configuration_hashi_vault_path_token: ""
+
+hashicorp_vault_configuration_ldap_path: ldap
+hashicorp_vault_configuration_ldap_description: Active Directory LDAP authentication
+hashicorp_vault_configuration_ldap:
+  url: "ldaps://ad.example.org:636"
+  binddn: "CN=vault-bind,OU=Service Accounts,DC=example,DC=org"
+  bindpass: ""
+  userdn: "OU=Users,DC=example,DC=org"
+  userattr: sAMAccountName
+  userfilter: "({{ '{{.UserAttr}}' }}={{ '{{.Username}}' }})"
+  groupdn: "OU=Groups,DC=example,DC=org"
+  groupattr: cn
+  groupfilter: "(&(objectClass=group)(member:1.2.840.113556.1.4.1941:={{ '{{.UserDN}}' }}))"
+  discoverdn: false
+  deny_null_bind: true
+  case_sensitive_names: false
+  use_token_groups: false
+  starttls: false
+  insecure_tls: false
+  tls_min_version: tls12
+  tls_max_version: tls13
+  certificate: ""
+  connection_timeout: 30
+  request_timeout: 90
+
+# Vault does not return bindpass from the read API. Set this to true after changing
+# bindpass when an Ansible run must explicitly report the LDAP configuration changed.
+hashicorp_vault_configuration_ldap_force_bindpass_update: false
+
+# mount must be a single URL path component without leading/trailing slash.
+hashicorp_vault_configuration_kv_v2: []
+#  - mount: applications
+#    description: Application secrets
+#    rw_group: AD-Vault-Applications-RW
+#    ro_group: AD-Vault-Applications-RO
+#    rw_policy: applications-rw  # optional
+#    ro_policy: applications-ro  # optional
+
+hashicorp_vault_configuration_policy_prefix: ad-kv
+hashicorp_vault_configuration_preserve_group_policies: true
+
+hashicorp_vault_configuration_clean_confirm: false
+hashicorp_vault_configuration_clean_disable_ldap: false
+hashicorp_vault_configuration_clean_remove_mounts: false
